@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="content-type" content="application/xhtml+xml; charset=UTF-8" />
+
+    <!-- favicons generated with https://realfavicongenerator.net -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+    <meta name="msapplication-TileColor" content="#da532c">
+    <meta name="theme-color" content="#ffffff">
+    
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="https://www.isitredorgreen.com/">
+    <meta name="twitter:creator" content="@grwster">
+    <meta name="twitter:title" content="Is that LED Red or Green?">
+    <meta name="twitter:description" content="Is the battery charged? Is the broadband connection up or down? If you have red/green color blindness, this app is for you.">
+    <meta name="twitter:image" content="http://www.isitredorgreen.com/charger.jpg">
+
+    <meta name="description" content="Is the battery charged? Is the broadband connection up or down? If you have red/green color blindness, this app is for you.">
+
+    <title>is it red or green?</title>
+
+    <style>
+html, body {
+    margin: 0;
+    webkit-user-select: none;
+}
+      
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgb(0,0,0);
+  background-color: rgba(0,0,0,0.4);
+}
+.modal-content {
+  background-color: #fefefe;
+  margin: 20px auto;
+  padding: 20px;
+  border: 1px solid #888;
+  border-radius: 5px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+  width: 75%;
+}
+.modal-close {
+  color: #aaa;
+  float: right;
+}
+.modal-close:hover,
+.modal-close:focus {
+  color: black;
+  text-decoration: none;
+  cursor: pointer;
+}
+    </style>
+  </head>
+  <body>
+    <div style="text-align: center">
+      <div style="display: none">
+        <video id="cameraVideo" playsinline=true></video>
+      </div>
+      <div id="output">
+        <div style="margin: 10px; text-align: center">
+          <big>Is that LED <span style="color: red">Red</span> or <span style="color: green">Green</span>?</big>
+          <p>Enable access to your camera to find out!</p>
+        </div>
+      </div>
+    </div>
+    <div style="margin: 10px; text-align: center">
+      <button id="about">About</button>
+      <button id="startAndStop" disabled>Start Camera</button>
+    </div>
+    <div style="text-align: center">
+https://www.isitredorgreen.com</br>
+Copyright 2021 <a href="https://www.grwster.com">Greg Whitehead</a>
+    </div>
+    <div id="aboutModal" class="modal">
+      <div class="modal-content" style="font-size: large">
+        <div style="font-size: larger">
+          Is that LED <span style="color: red">Red</span> or <span style="color: green">Green</span>? <span id="aboutClose" class="modal-close">&times;</span>
+          <hr>
+        </div>
+        <img src="charger.jpg" width="100%">
+        <p>
+          Is the battery charged? Is the broadband connection up or down?
+          If you have <a href="https://en.wikipedia.org/wiki/Color_blindness" target="_blank">red/green color blindness</a>, these questions can sometimes be hard to answer.
+        </p>
+        <p>
+          This mobile web app analyzes video from your phone's camera and labels regions of bright red, green, or blue color.
+          Point the camera at a red, green, or blue LED and it should be labeled.
+        </p>
+        <p>
+          Works best with good lighting.
+          You may need to get a close-up view and/or try different angles before the color is detected.
+          Minimal effort is made to avoid labeling things that aren't LEDs.
+        </p>
+        <p>
+          All of the video analysis and processing is done in javascript, in the web browser, which can drain your battery.
+          Use the "Stop Camera" button or close the app when you are done to save battery life.
+          Use the "Start Camera" button to restart video processing if it is stopped.
+        </p>
+        <p>
+          More info at <a href="https://github.com/grwhitehead/isitredorgreen" target="_blank">https://github.com/grwhitehead/isitredorgreen</a>
+        </p>
+        <center>Copyright 2021 <a href="https://www.grwster.com" target="_blank">Greg Whitehead</a></center>
+      </div>
+    </div>
+<script type="text/javascript">
+let loc = window.location.href+'';
+if (loc.indexOf('http://')==0) {
+    if (loc.indexOf('localhost')<0) {
+        // camera access requires https
+        window.location.href = loc.replace('http://','https://');
+    }
+}
+
+let output = document.getElementById('output');
+let startAndStop = document.getElementById('startAndStop');
+
+let cameraVideo = null;
+let cameraStream = null;
+
+function startCamera() {
+    cameraVideo = document.getElementById('cameraVideo');
+    navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment'}, audio: false})
+        .then(function(stream) {
+            cameraStream = stream;
+            cameraVideo.srcObject = stream;
+            cameraVideo.oncanplay = onCameraStarted;
+            cameraVideo.play();
+        })
+        .catch(function(err) {
+            console.log(err)
+        });
+}
+
+function stopCamera() {
+    if (cameraVideo) {
+        cameraVideo.pause();
+        cameraVideo.srcObject = null;
+        cameraVideo = null;
+    }
+    if (cameraStream) {
+        cameraStream.getVideoTracks()[0].stop();
+        cameraStream = null;
+    }
+    onCameraStopped();
+}
+
+let cameraStreaming = false;
+let cameraMuted = false;
+let cameraOrientationChanged = false;  
+
+function onCameraStarted() {
+    cameraStreaming = true;
+    startAndStop.innerText = 'Stop Camera';
+    
+    cameraMuted = false;    
+    cameraStream.getVideoTracks()[0].onmute = function() {
+        cameraMuted = true;
+    }
+    cameraStream.getVideoTracks()[0].onunmute = function() {
+        if (cameraStreaming) {
+            cameraMuted = false;
+            setTimeout(processVideo, 0);
+        }
+    }
+    cameraStream.getVideoTracks()[0].onended = function() {
+        stopCamera();
+    }
+    
+    cameraOrientationChanged = false;
+
+    cameraVideo.width = cameraVideo.videoWidth;
+    cameraVideo.height = cameraVideo.videoHeight;
+    
+    let canvas = document.createElement('canvas');
+    canvas.id = "canvasOutput";
+    canvas.width = cameraVideo.width;
+    canvas.height = cameraVideo.height;
+    output.replaceChildren(canvas)
+
+    let scaleX = window.innerWidth / canvas.width;
+    let scaleY = window.innerHeight / canvas.height;
+    let scaleToFit = Math.min(scaleX, scaleY);
+    let dstScaled = null;
+    if (scaleToFit < 1) {
+        canvas.width = Math.round(cameraVideo.width*scaleToFit);
+        canvas.height = Math.round(cameraVideo.height*scaleToFit);
+        dstScaled = new cv.Mat(canvas.height, canvas.width, cv.CV_8UC4);
+    }
+   
+    let src = new cv.Mat(cameraVideo.height, cameraVideo.width, cv.CV_8UC4);
+    let mask = new cv.Mat(cameraVideo.height, cameraVideo.width, cv.CV_8UC1);
+    let cap = new cv.VideoCapture(cameraVideo);
+    
+    function labelColor(src, dst, lowerBound, upperBound, text, textColor) {
+        let lowerBoundMat = new cv.Mat(cameraVideo.height, cameraVideo.width, src.type(), lowerBound);
+        let upperBoundMat = new cv.Mat(cameraVideo.height, cameraVideo.width, src.type(), upperBound);
+        cv.inRange(src, lowerBoundMat, upperBoundMat, mask);
+        lowerBoundMat.delete(); upperBoundMat.delete();
+        
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE);
+        for (let i = 0; i < contours.size(); ++i) {
+            const c = contours.get(i);
+            let m = cv.moments(c);
+            let cx = m.m10/m.m00;
+            let cy = m.m01/m.m00;
+            cv.putText(dst, text, new cv.Point(cx, cy), cv.FONT_HERSHEY_SIMPLEX, 2, textColor, 4);
+        }
+        contours.delete(); hierarchy.delete();
+    }
+
+    const FPS = 30;
+    function processVideo() {
+        try {
+            if (!cameraStreaming) {
+                // clean and stop
+                src.delete();
+                mask.delete();
+                if (dstScaled) {
+                    dstScaled.delete();
+                }
+                return;
+            }
+            if (cameraMuted) {
+                // suspend while camera muted
+                return;
+            }
+            if (cameraOrientationChanged) {
+                // restart camera in new orientation
+                stopCamera();
+                setTimeout(startCamera, 0);
+                return;
+            }
+            let begin = Date.now();
+
+            // get the next frame
+            cap.read(src);
+            
+            // overlay labels on frame
+            let dst = src.clone();
+            // colors are RGBA
+            labelColor(src, dst, new cv.Scalar(200, 0, 0, 255), new cv.Scalar(255, 100, 100, 255), 'R', new cv.Scalar(255, 0, 0, 255));
+            labelColor(src, dst, new cv.Scalar(0, 200, 0, 255), new cv.Scalar(100, 255, 100, 255), 'G', new cv.Scalar(0, 255, 0, 255));
+            labelColor(src, dst, new cv.Scalar(0, 0, 200, 255), new cv.Scalar(100, 100, 255, 255), 'B', new cv.Scalar(0, 0, 255, 255));
+            if (dstScaled) {
+                cv.resize(dst, dstScaled, new cv.Size(canvas.width,canvas.height), 0, 0, cv.INTER_AREA);
+                cv.imshow('canvasOutput', dstScaled);
+            } else {
+                cv.imshow('canvasOutput', dst);
+            }
+            dst.delete();
+
+            // schedule processing of next frame
+            let delay = 1000/FPS - (Date.now() - begin);
+            setTimeout(processVideo, delay);
+        } catch (err) {
+            console.log(err)
+        }
+    };
+
+    // start processing
+    setTimeout(processVideo, 0);
+}
+
+function onCameraStopped() {
+    cameraStreaming = false;
+    startAndStop.innerText = 'Start Camera';
+}
+
+let about = document.getElementById('about');
+let aboutModal = document.getElementById('aboutModal');
+var aboutClose = document.getElementById("aboutClose");
+  
+about.onclick = function() {
+    aboutModal.style.display = "block";
+}
+
+aboutClose.onclick = function() {
+    aboutModal.style.display = "none";
+}
+
+aboutModal.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        aboutModal.style.display = "none";
+    }
+}
+
+startAndStop.onclick = function() {
+    if (!cameraStreaming) {
+        startCamera();
+    } else {
+        stopCamera();
+    }
+}
+
+window.onorientationchange = function() {
+    cameraOrientationChanged = true;
+}
+
+function onOpenCvReady() {
+    startAndStop.removeAttribute('disabled');
+    startCamera();
+}
+</script>
+<script async src="opencv.js" onload="onOpenCvReady()" type="text/javascript"></script>
+  </body>
+</html>
